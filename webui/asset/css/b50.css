@@ -103,17 +103,21 @@
     align-items: center;
     gap: 8px;
     font-size: 0.9em;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    min-width: 0;
 }
 
 .vf-card-difficulty {
     font-weight: 600;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .vf-card-score {
     color: #4a4a4a;
     font-size: 0.95em;
+    min-width: 0;
+    white-space: nowrap;
 }
 
 .vf-card-vf {
@@ -121,6 +125,8 @@
     color: #00d1b2;
     margin-left: auto;
     font-size: 1em;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 #vf-view-list.is-active,
