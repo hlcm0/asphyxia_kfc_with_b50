@@ -338,6 +338,44 @@ function getCurrentVersionText() {
     return versionText[currentVersion] || ('Version ' + currentVersion);
 }
 
+function getCurrentProfile() {
+    if (!profile_data || profile_data.length === 0) {
+        return null;
+    }
+
+    for (var index = 0; index < profile_data.length; index++) {
+        if (parseInt(profile_data[index].version, 10) === currentVersion) {
+            return profile_data[index];
+        }
+    }
+
+    return profile_data[profile_data.length - 1] || null;
+}
+
+function getCurrentPlayerName() {
+    var currentProfile = getCurrentProfile();
+    if (!currentProfile || !currentProfile.name) {
+        return 'Unknown Player';
+    }
+
+    return currentProfile.name;
+}
+
+function calculateCurrentTotalVolforce() {
+    if (currentTop50.length === 0) {
+        return '0.000';
+    }
+
+    var totalVF = 0;
+
+    for (var index = 0; index < currentTop50.length; index++) {
+        totalVF += currentTop50[index].vf;
+    }
+
+    totalVF /= (currentVersion === 7) ? 1000 : 100;
+    return toFixed(totalVF, 3);
+}
+
 function sanitizeFileName(value) {
     return value.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'b50';
 }
@@ -366,17 +404,53 @@ function createExportStage(top50) {
     });
     var exportTitle = $('<div>', {
         class: 'vf-export-title',
-        text: 'VOLFORCE Best 50'
+        text: 'SDVX B50'
     });
-    var exportMeta = $('<div>', {
-        class: 'vf-export-meta',
-        text: getCurrentVersionText()
+    var exportInfo = $('<div>', {
+        class: 'vf-export-info'
     });
     var exportGrid = $('<div>', {
         class: 'vf-grid-container'
     });
 
-    exportHeader.append(exportTitle, exportMeta);
+    exportInfo.append(
+        $('<span>', {
+            class: 'vf-export-meta',
+            text: getCurrentVersionText()
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-divider',
+            text: '|'
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-label',
+            text: 'PLAYER:'
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-value',
+            text: getCurrentPlayerName()
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-divider',
+            text: '|'
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-label',
+            text: 'VF:'
+        })
+    ).append(
+        $('<span>', {
+            class: 'vf-export-info-value',
+            text: calculateCurrentTotalVolforce()
+        })
+    );
+
+    exportHeader.append(exportTitle, exportInfo);
     exportBoard.append(exportHeader, exportGrid);
     exportStage.append(exportBoard);
     $('body').append(exportStage);

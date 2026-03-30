@@ -160,9 +160,42 @@
 }
 
 .vf-export-meta {
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
     color: #4a5568;
+}
+
+.vf-export-info {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.vf-export-info-label {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #718096;
+}
+
+.vf-export-info-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a202c;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vf-export-info-divider {
+    font-size: 22px;
+    font-weight: 600;
+    color: #a0aec0;
 }
 
 .vf-export-board .vf-grid-container {
