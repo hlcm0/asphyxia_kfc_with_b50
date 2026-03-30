@@ -1,0 +1,69 @@
+//DATA//
+  profile: DB.Find(refid, { collection: 'profile' })
+  score_data: DB.Find(refid, { collection: 'music' })
+  skill_data: DB.Find(refid,{collection: 'skill'})
+  course_data: DB.Find(refid,{collection: 'course'})
+  arena_data: DB.Find(refid,{collection: 'arena'})
+
+link(rel="stylesheet" href="static/asset/css/b50.css")
+div
+  .card
+    .card-header
+      p.card-header-title
+        span.icon
+          i.mdi.mdi-account-edit
+        | Profile
+    .card-content
+      .field
+        label.label Version Select
+        .ver-select
+          .control
+            .select
+              select(name="version_select" id="version_select")
+
+  .card
+    .card-header
+      p.card-header-title
+        span.icon
+          i.mdi.mdi-star
+        | VOLFORCE Best 50
+      .card-header-icon
+        .field.has-addons
+          .control
+            button.button.is-small.is-info#vf-export-image(type="button" disabled)
+              span.icon
+                i.mdi.mdi-download
+              span Export Image
+          .control
+            button.button.is-small#vf-view-list.is-active(onclick="switchVFView('list')")
+              span.icon
+                i.mdi.mdi-view-list
+              span List
+          .control
+            button.button.is-small#vf-view-grid(onclick="switchVFView('grid')")
+              span.icon
+                i.mdi.mdi-view-grid
+              span Grid
+    .card-content
+      #vf-list-view
+        table.table(id="volforce50" style="width:100%")
+          thead
+            tr
+              th #
+              th Song Name
+              th Difficulty
+              th Clear Mark
+              th Score
+              th FORCE
+          tbody
+      #vf-grid-view(style="display:none")
+        .vf-grid-container
+
+div(hidden id='data-pass') !{JSON.stringify(profile)}
+div(hidden id='score-pass') !{JSON.stringify(score_data)}
+div(hidden id='skill-pass') !{JSON.stringify(skill_data)}
+div(hidden id='course-pass') !{JSON.stringify(course_data)}
+div(hidden id='arena-pass') !{JSON.stringify(arena_data)}
+script(src="static/asset/js/dom-to-image.min.js")
+script(src="static/asset/js/b50.js")
+script(src="static/asset/js/datatables.js")

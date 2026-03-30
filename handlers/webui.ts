@@ -188,6 +188,7 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
   let newChatStampData = []
   let newValgeneItemFiles = []
   let newAkanames = []
+  let newJacketFiles = []
   let runErrors = []
   let resourceJsonData = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/data.json'), 'utf8'))
   let apCardJsonData = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/appeal.json'), 'utf8'))
@@ -479,6 +480,46 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
       runErrors.push('Error reading appeal card xml file.')
     }
 
+    // Copying new jacket files from gamedata
+    console.log("Copying new jacket files from gamedata")
+    if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/music")) {
+      let musicFolders = await IO.ReadDir(U.GetConfig('sdvx_eg_root_dir') + "/data/music")
+      for await (const musicFolder of musicFolders) {
+        if (musicFolder.type === 'dir') {
+          let folderPath = U.GetConfig('sdvx_eg_root_dir') + "/data/music/" + musicFolder.name
+          let jacketFiles = await IO.ReadDir(folderPath)
+          
+          // Extract song ID from folder name (e.g., "0001_albida_muryoku" -> "0001")
+          let songIdMatch = musicFolder.name.match(/^(\d+)/)
+          if (songIdMatch) {
+            let songId = songIdMatch[1]
+            
+            // Process all jk_ files in the folder
+            for await (const file of jacketFiles) {
+              if (file.name.match(/^jk_\d+_\d+\.png$/)) {
+                // Extract difficulty number from filename (e.g., "jk_0001_1.png" -> "1")
+                let diffMatch = file.name.match(/jk_\d+_(\d+)\.png$/)
+                if (diffMatch) {
+                  let diffNum = diffMatch[1]
+                  let targetPath = 'webui/asset/jacket/' + songId + '_' + diffNum + '.png'
+                  
+                  if (!IO.Exists(targetPath)) {
+                    console.log("[jacket] copying " + file.name + " for song " + songId)
+                    let fileToWrite = await IO.ReadFile(folderPath + "/" + file.name)
+                    IO.WriteFile(targetPath, fileToWrite)
+                    newJacketFiles.push(songId + '_' + diffNum + '.png')
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      console.log('Error reading music directory.')
+      runErrors.push('Error reading music directory.')
+    }
+
     await IO.WriteFile('webui/asset/json/data.json', JSON.stringify(resourceJsonData, null, 4))
     await IO.WriteFile('webui/asset/json/appeal.json', JSON.stringify(apCardJsonData, null, 4))
 
@@ -636,6 +677,7 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
         bgm: newBGMData,
         chatStamp: newChatStampData,
         valgeneItemFiles: newValgeneItemFiles,
+        jacketFiles: newJacketFiles,
         jsonSongs: newJsonSongs.sort((a, b) => a[0] - b[0]),
         infSongs: newINFSongs.sort((a, b) => a[0] - b[0]),
         ultSongs: newULTSongs.sort((a, b) => a[0] - b[0]),
