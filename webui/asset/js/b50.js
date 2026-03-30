@@ -246,8 +246,8 @@ function getJacketPath(mid, type) {
 function singleScoreVolforce(score) {
     var level = getSongLevel(score.mid, score.type);
     var tempVF = parseInt(level, 10) * (parseInt(score.score, 10) / 10000000) * getGrade(score.grade) * getMedalFactor(score.clear, score.version) * 2;
-    if (currentVersion === 7 && 'volforce' in score) tempVF = score.volforce;
-    return tempVF;
+    if (currentVersion === 7 && 'volforce' in score) return score.volforce / 20;
+    return tempVF / 2;
 }
 
 function toFixed(num, fixed) {
