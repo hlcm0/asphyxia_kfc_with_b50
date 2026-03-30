@@ -245,7 +245,7 @@ function getJacketPath(mid, type) {
 
 function singleScoreVolforce(score) {
     var level = getSongLevel(score.mid, score.type);
-    var tempVF = parseInt(level, 10) * (parseInt(score.score, 10) / 10000000) * getGrade(score.grade) * getMedalFactor(score.clear, score.version) * 2;
+    var tempVF = parseInt(parseInt(level, 10) * (parseInt(score.score, 10) / 10000000) * getGrade(score.grade) * getMedalFactor(score.clear, score.version) * 20, 10);
     if (currentVersion === 7 && 'volforce' in score) tempVF = score.volforce;
     return tempVF;
 }
@@ -313,7 +313,7 @@ function generateVFCard(score, index) {
         '<div class="vf-card-details">',
         '<span class="vf-card-difficulty" style="color:' + diffColor + '">' + diffName + diffNum + '</span>',
         '<span class="vf-card-score">' + score.score.toLocaleString() + '</span>',
-        '<span class="vf-card-vf">' + vf + '</span>',
+        '<span class="vf-card-vf">' + vf / 20 + '</span>',
         '</div>',
         '</div>',
         '</div>',
@@ -372,7 +372,7 @@ function calculateCurrentTotalVolforce() {
         totalVF += currentTop50[index].vf;
     }
 
-    totalVF /= (currentVersion === 7) ? 1000 : 100;
+    totalVF /= 1000;
     return toFixed(totalVF, 3);
 }
 
