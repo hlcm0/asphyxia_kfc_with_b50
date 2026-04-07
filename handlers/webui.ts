@@ -8,6 +8,7 @@ import { Mix } from '../models/mix'
 import { Rival } from '../models/rival'
 import { Item } from '../models/item'
 import { WeeklyMusicScore } from '../models/weeklymusic'
+import { COURSES2 } from '../data/ii'
 import { PREGENE, COURSES6 } from '../data/exg'
 import { PREGENE7, COURSES7 } from '../data/nbl'
 import { textureslist } from '../data/webui'
@@ -140,38 +141,40 @@ export const updateProfile = async (data: {
     { $set: update }
   );
 
-  if (parseInt(data.skilltitle) >= 0) {
-    await DB.Update<Skill>(
-      data.refid,
-      { collection: 'skill', version: parseInt(data.version_select) },
-      { $set: {
-          name: parseInt(data.skilltitle)
-        } 
-      }
-    );
-  }
-  
-  if (parseInt(data.valgeneTicket) >= 0) {
-    await DB.Upsert<ValgeneTicket>(
-      data.refid,
-      { collection: 'valgene_ticket' },
-      { $set: {
-          ticketNum: parseInt(data.valgeneTicket),
-          limitDate: Date.parse('31 Dec 2099 23:59:59 GMT'),
-          version: parseInt(data.version_select)
-        } 
-      }
-    );
-  }
-
-  await DB.Upsert<Param>(
-    data.refid,
-    { collection: 'param', type: 2, id: 2, version: parseInt(data.version_select) },
-    { $set: {
-        param: customParam
-      }
+  if(parseInt(data.version_select) >= 6) {
+    if (parseInt(data.skilltitle) >= 0) {
+      await DB.Update<Skill>(
+        data.refid,
+        { collection: 'skill', version: parseInt(data.version_select) },
+        { $set: {
+            name: parseInt(data.skilltitle)
+          } 
+        }
+      );
     }
-  )
+    
+    if (parseInt(data.valgeneTicket) >= 0) {
+      await DB.Upsert<ValgeneTicket>(
+        data.refid,
+        { collection: 'valgene_ticket' },
+        { $set: {
+            ticketNum: parseInt(data.valgeneTicket),
+            limitDate: Date.parse('31 Dec 2099 23:59:59 GMT'),
+            version: parseInt(data.version_select)
+          } 
+        }
+      );
+    }
+
+    await DB.Upsert<Param>(
+      data.refid,
+      { collection: 'param', type: 2, id: 2, version: parseInt(data.version_select) },
+      { $set: {
+          param: customParam
+        }
+      }
+    )
+  }
 };
 
 export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
@@ -190,106 +193,190 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
   let newAkanames = []
   let newJacketFiles = []
   let runErrors = []
+  let runLogs = []
   let resourceJsonData = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/data.json'), 'utf8'))
   let apCardJsonData = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/appeal.json'), 'utf8'))
   let courseDataUpdateSuccess = false
   let ifsSuccess = []
+  const logLine = (message: string) => {
+    console.log(message)
+    runLogs.push(message)
+  }
+  const logError = (message: string) => {
+    console.log(message)
+    runLogs.push('[ERROR] ' + message)
+    runErrors.push(message)
+  }
   
   try {
     // Get new music data from music_db.xml
-    console.log('Getting new music_db info')
-    let mdbPaths = [
-      ["mdb", "/data/others/music_db.xml"],
-      ["omni", "/data_mods/omnimix/others/music_db.merged.xml"]
-    ]
-    let prevAssetMdb = []
+    logLine('Getting new music_db info')
+    let ver = 0
+    let prevAssetMdb = {}
+    let difLbl = ['', '', 'INF', 'GRV', 'HVN', 'VVD', 'XCD', 'NBL (tmp)']
     if(IO.Exists('webui/asset/json/music_db.json')) {
       prevAssetMdb = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/music_db.json'), 'utf8'))
     }
-    if(!("omni" in prevAssetMdb)) prevAssetMdb["omni"] = { music: [] }
-    
-    for(const path of mdbPaths) {
-      if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + path[1])) {
-        let mdb = U.parseXML(U.DecodeString(await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + path[1]), "shift_jis"), false)
-        
-        let levelDiv = (mdb.mdb.music[0].difficulty.exhaust.difnum['@content'][0].toString().length === 3) ? 10 : 1
-        
-        mdb.mdb.music.forEach(musicValue => {
-          if(Object.keys(prevAssetMdb).length > 0) {
-            if(prevAssetMdb[path[0]]['music'].find(item => parseInt(item['id']) == parseInt(musicValue['@attr'].id)) == undefined) {
-              console.log((path[0] === 'omni' ? "[omnimix] " : "") + "New song added to json: " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
-              newJsonSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + (path[0] === 'omni' ? " | omnimix" : "") + '] ' + musicValue.info.title_name['@content']])
-            }
 
-            if(prevAssetMdb[path[0]]['music'].find(item => (parseInt(item['id']) == parseInt(musicValue['@attr'].id) && parseInt(item['info']['inf_ver']) === 0)) != undefined) {
-              let infVer = musicValue.info.inf_ver['@content']
-              if(['6', '7'].includes(infVer)) {
-                console.log((path[0] === 'omni' ? "[omnimix] " : "") + "New chart: [" + (infVer === '6') ? "XCD" : "NBL" + "] " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
-                newINFSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + (path[0] === 'omni' ? " | omnimix" : "") + '] ' + musicValue.info.title_name['@content']])
-              }
-            } 
-
-            if(prevAssetMdb[path[0]]['music'].find(item => (parseInt(item['id']) == parseInt(musicValue['@attr'].id) && 'ultimate' in item['difficulty'] )) == undefined && 'ultimate' in musicValue.difficulty) {
-              console.log((path[0] === 'omni' ? "[omnimix] " : "") + "New chart: [ULT] " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
-              newULTSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + (path[0] === 'omni' ? " | omnimix" : "") + '] ' + musicValue.info.title_name['@content']])
-            }
-          } else {
-            console.log((path[0] === 'omni' ? "[omnimix] " : "") + "New song added to json: " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
-            newJsonSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + (path[0] === 'omni' ? " | omnimix" : "") + '] ' + musicValue.info.title_name['@content']])
-            
-            let infVer = musicValue.info.inf_ver['@content']
-            if(['6', '7'].includes(infVer)) {
-              console.log((path[0] === 'omni' ? "[omnimix] " : "") + "New chart: [" + (infVer === '6') ? "XCD" : "NBL" + "] " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
-              newINFSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + (path[0] === 'omni' ? " | omnimix" : "") + '] ' + musicValue.info.title_name['@content']])
-            }
-          }
-
-          let mObj = {
-            'id': musicValue['@attr'].id,
-            'info': {
-              'title_name': musicValue.info.title_name['@content'],
-              'version': musicValue.info.version['@content'][0].toString(),
-              'inf_ver': musicValue.info.inf_ver['@content'][0].toString(),
-              'distribution_date': musicValue.info.distribution_date['@content'][0]
-            },
-            'difficulty': {
-              'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
-              'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
-              'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
-              'maximum': 'maximum' in musicValue.difficulty ? (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString() : '0',
-              'infinite': 'infinite' in musicValue.difficulty ? (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString() : '0',
-              'ultimate': 'ultimate' in musicValue.difficulty ? (musicValue.difficulty.ultimate.difnum['@content'][0] / levelDiv).toString() : '0'
-            }
-          }
-
-          if(path[0] === "mdb") mdbJsonFix.push(mObj)
-          else mdbJsonOmniFix.push(mObj)
-        })
-
-        mdbJsonFixFinal = {
-          'mdb': {
-            'music': mdbJsonFix
-          },
-          'omni': {
-            'music': mdbJsonOmniFix
-          }
-        };
-        IO.WriteFile('webui/asset/json/music_db.json', JSON.stringify(mdbJsonFixFinal, null, 4));
-      } else {
-        console.log('Error reading music_db.xml.')
-        runErrors.push('Error reading music_db.xml.')
+    if (prevAssetMdb == {}) {
+      prevAssetMdb = {
+        'mdb': {
+          'music': []
+        }
       }
-
     }
+    while(ver <= 7) {
+      if(IO.Exists('./webui/asset/uploads/' + ver + '_mdb.xml')) {
+        logLine('Importing ' + ((ver === 0) ? 'omnimix' : 'SDVX' + ver) + ' mdb')
+        let mdb = U.parseXML(U.DecodeString(await IO.ReadFile('./webui/asset/uploads/' + ver + '_mdb.xml'), "shift_jis"), false)
+        mdb.mdb.music.forEach(musicValue => {
+          let levelDiv = (ver > 0 && ver < 6) ? 1 : (musicValue.difficulty.exhaust.difnum['@content'][0].toString().length === 3) ? 10 : 1
+          if(ver === 7 && ['840', '1219', '1751'].includes(musicValue['@attr'].id)) levelDiv = 10
+          let ind = prevAssetMdb['mdb']['music'].findIndex(item => parseInt(item['id']) == parseInt(musicValue['@attr'].id))
+          let dif = [{}, {}, {}, {}, {}, {}, {}, {}]
+          if (ind < 0) {
+            switch (ver) {
+              case 0:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'maximum': 'maximum' in musicValue.difficulty ? (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'infinite': 'infinite' in musicValue.difficulty ? (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'ultimate': 'ultimate' in musicValue.difficulty ? (musicValue.difficulty.ultimate.difnum['@content'][0] / levelDiv).toString() : '0'
+                }
+                break
+              case 1:
+                dif[ver] = {
+                  'novice': $(musicValue).number('difficulty.0.difnum').toString(),
+                  'advanced': $(musicValue).number('difficulty.1.difnum').toString(),
+                  'exhaust': $(musicValue).number('difficulty.2.difnum').toString(),
+                }
+                break
+              case 2:
+              case 3:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'infinite': (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString(),
+                } 
+                break
+              case 6:
+              case 7:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'maximum': 'maximum' in musicValue.difficulty ? (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'infinite': 'infinite' in musicValue.difficulty ? (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'ultimate': 'ultimate' in musicValue.difficulty ? (musicValue.difficulty.ultimate.difnum['@content'][0] / levelDiv).toString() : '0'
+                }
+                break
+            }
+
+            logLine("New song added to json: " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")")
+            newJsonSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + '] ' + musicValue.info.title_name['@content']])
+            prevAssetMdb['mdb']['music'].push({
+              'id': musicValue['@attr'].id,
+              'info': {
+                'title_name': musicValue.info.title_name['@content'],
+                'version': musicValue.info.version['@content'][0].toString(),
+                ...ver === 0 && {'omnimix': ver === 0},
+                'inf_ver': musicValue.info.inf_ver['@content'][0].toString(),
+                'distribution_date': musicValue.info.distribution_date['@content'][0].toString()
+              },
+              'difficulty': dif
+            })
+          } else {
+            dif = prevAssetMdb['mdb']['music'][ind]['difficulty']
+            let newInfVer = ver > 1 && (parseInt(prevAssetMdb['mdb']['music'][ind]['info']['inf_ver']) === 0 && parseInt(prevAssetMdb['mdb']['music'][ind]['info']['inf_ver']) < (ver === 2 ? (parseInt(musicValue.difficulty.infinite.difnum['@content'][0]) !== 0 ? 2 : 0) : parseInt(musicValue.info.inf_ver['@content'][0])))
+            let newUlt = ver >= 6 && !('ult' in prevAssetMdb['mdb']['music'][ind]['info']) && 'ultimate' in musicValue.difficulty
+            switch (ver) {
+              case 0:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'maximum': 'maximum' in musicValue.difficulty ? (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'infinite': 'infinite' in musicValue.difficulty ? (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'ultimate': 'ultimate' in musicValue.difficulty ? (musicValue.difficulty.ultimate.difnum['@content'][0] / levelDiv).toString() : '0'
+                }
+                prevAssetMdb['mdb']['music'][ind]['info']['distribution_date'] = musicValue.info.distribution_date['@content'][0].toString()
+                prevAssetMdb['mdb']['music'][ind]['info']['omnimix'] = true
+                if(newInfVer) prevAssetMdb['mdb']['music'][ind]['info']['inf_ver'] = musicValue.info.inf_ver['@content'][0].toString()
+                break
+              case 1:
+                dif[ver] = {
+                  'novice': $(musicValue).number('difficulty.0.difnum').toString(),
+                  'advanced': $(musicValue).number('difficulty.1.difnum').toString(),
+                  'exhaust': $(musicValue).number('difficulty.2.difnum').toString(),
+                }
+                break
+              case 2:
+              case 3:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'infinite': (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString(),
+                } 
+                if(ver === 3) {
+                  prevAssetMdb['mdb']['music'][ind]['info']['distribution_date'] = musicValue.info.distribution_date['@content'][0].toString()
+                  if(newInfVer) prevAssetMdb['mdb']['music'][ind]['info']['inf_ver'] = musicValue.info.inf_ver['@content'][0].toString()
+                }
+                break
+              // case 4:
+              // case 5:
+              //   dif[ver] = {
+              //     'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+              //     'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+              //     'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+              //     'maximum': (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString(),
+              //     'infinite': (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString(),
+              //   }
+              //   prevAssetMdb['mdb']['music'][ind]['info']['distribution_date'] = musicValue.info.distribution_date['@content'][0].toString()
+              //   prevAssetMdb['mdb']['music'][ind]['info']['inf_ver'] = musicValue.info.inf_ver['@content'][0].toString()
+              //   break
+              case 6:
+              case 7:
+                dif[ver] = {
+                  'novice': (musicValue.difficulty.novice.difnum['@content'][0] / levelDiv).toString(),
+                  'advanced': (musicValue.difficulty.advanced.difnum['@content'][0] / levelDiv).toString(),
+                  'exhaust': (musicValue.difficulty.exhaust.difnum['@content'][0] / levelDiv).toString(),
+                  'maximum': 'maximum' in musicValue.difficulty ? (musicValue.difficulty.maximum.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'infinite': 'infinite' in musicValue.difficulty ? (musicValue.difficulty.infinite.difnum['@content'][0] / levelDiv).toString() : '0',
+                  'ultimate': 'ultimate' in musicValue.difficulty ? (musicValue.difficulty.ultimate.difnum['@content'][0] / levelDiv).toString() : '0'
+                }
+                prevAssetMdb['mdb']['music'][ind]['info']['distribution_date'] = musicValue.info.distribution_date['@content'][0].toString()
+                if(newInfVer) prevAssetMdb['mdb']['music'][ind]['info']['inf_ver'] = musicValue.info.inf_ver['@content'][0].toString()
+                break
+            }
+            if(newInfVer) {
+              logLine("New chart: [" + difLbl[prevAssetMdb['mdb']['music'][ind]['info']['inf_ver']] + "] " + prevAssetMdb['mdb']['music'][ind]['info'].title_name + " (" + musicValue.info.distribution_date['@content'] + ")") 
+              newINFSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + '] ' + musicValue.info.title_name['@content']  + ' (' + difLbl[prevAssetMdb['mdb']['music'][ind]['info']['inf_ver']] + ')'])
+            }
+            if(newUlt) {
+              logLine("New chart: [ULT] " + musicValue.info.title_name['@content'] + " (" + musicValue.info.distribution_date['@content'] + ")") 
+              newULTSongs.push([ musicValue['@attr'].id, '[' + musicValue.info.distribution_date['@content'] + ' | ' + musicValue['@attr'].id + '] ' + musicValue.info.title_name['@content']])
+              prevAssetMdb['mdb']['music'][ind]['info']['ult'] = true
+            }
+            prevAssetMdb['mdb']['music'][ind]['difficulty'] = dif
+          }
+        })
+      }
+      ver++
+    }
+    IO.WriteFile('webui/asset/json/music_db.json', JSON.stringify(prevAssetMdb, null, 4));
 
     // Copying new nemsys files from gamedata
-    console.log("Copying new nemsys files from gamedata")
+    logLine("Copying new nemsys files from gamedata")
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/game_nemsys")) {
       let nemsysFiles = await IO.ReadDir(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/game_nemsys")
       for await (const nemsys of nemsysFiles) {
         let fileToWrite = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/game_nemsys/" + nemsys.name)
         if(!IO.Exists('webui/asset/nemsys/' + nemsys.name.substring(0, (nemsys.name.length - 4)) + ".png") && !IO.Exists('webui/asset/nemsys/' + nemsys.name.substring(0, (nemsys.name.length - 4)) + ".jpg")) {
-          console.log("[nemsys] copying " + nemsys.name)
+          logLine("[nemsys] copying " + nemsys.name)
           IO.WriteFile('webui/asset/nemsys/' + nemsys.name, fileToWrite)
           newNemsysData.push(nemsys.name)
         }
@@ -297,25 +384,24 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
         if(nemsys.name.match(/([0-9]+)/g) != undefined) {
           let nemsysId = parseInt(nemsys.name.match(/([0-9]+)/g)[0])
           if(nemsysId && ![8, 9, 10, 11, 47].includes(nemsysId) && resourceJsonData.nemsys.find(nem => nem.value == nemsysId) == undefined) {
-            console.log("[nemsys] adding to json: " + nemsys.name)
+            logLine("[nemsys] adding to json: " + nemsys.name)
             resourceJsonData.nemsys.push({"value": nemsysId, "name": nemsys.name})
           }
         }
       }
     } else {
-      console.log('Error reading nemsys directory.')
-      runErrors.push('Error reading nemsys directory.')
+      logError('Error reading nemsys directory.')
     }
 
     // Copying new subbg files from gamedata
-    console.log("Copying new subbg files from gamedata")
+    logLine("Copying new subbg files from gamedata")
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/submonitor_bg")) {
       let subBGFiles = await IO.ReadDir(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/submonitor_bg")
       for await (const subbg of subBGFiles) {
         if (subbg.name.match(/^(subbg[_0-9]*)(\.png|\.jpg|\.mp4)/g)) {
           let fileToWrite = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/submonitor_bg/" + subbg.name)
           if(!IO.Exists('webui/asset/submonitor_bg/' + subbg.name.substring(0, (subbg.name.length - 4)) + ".png") && !IO.Exists('webui/asset/submonitor_bg/' + subbg.name.substring(0, (subbg.name.length - 4))  + ".jpg") && !IO.Exists('webui/asset/submonitor_bg/' + subbg.name.substring(0, (subbg.name.length - 4))  + ".mp4")) {
-            console.log("[subbg] copying " + subbg.name)
+            logLine("[subbg] copying " + subbg.name)
             IO.WriteFile('webui/asset/submonitor_bg/' + subbg.name, fileToWrite)
             newSubBGData.push(subbg.name)
           } 
@@ -332,19 +418,18 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
             } else if(subbg.name.includes('.mp4')) subbgType = 'video'
             
             if(foundSubbg == -1) {
-              console.log("[subbg] adding " + subbgId + " - " + subbgName + " (" + subbgType + ")")
+              logLine("[subbg] adding " + subbgId + " - " + subbgName + " (" + subbgType + ")")
               resourceJsonData.subbg.push({"value": subbgId, "type": subbgType, "name": subbgName})
             }
           }
         }
       }
     } else {
-      console.log('Error reading submonitor_bg directory.')
-      runErrors.push('Error reading submonitor_bg directory.')
+      logError('Error reading submonitor_bg directory.')
     }
 
     // Copying new bgm files from gamedata
-    console.log("Copying new bgm files from gamedata")
+    logLine("Copying new bgm files from gamedata")
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/sound/custom")) {
       let bgmFiles = await IO.ReadDir(U.GetConfig('sdvx_eg_root_dir') + "/data/sound/custom")
       for await (const bgm of bgmFiles) {
@@ -352,7 +437,7 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
           let folderName = bgm.name.match(/(custom|special)_([0-9]*)/g)[0]
           if(folderName != '') {
             if(!IO.Exists('webui/asset/audio/' + folderName)) {
-              console.log("[bgm] extracting audio files from " + bgm.name + ".")
+              logLine("[bgm] extracting audio files from " + bgm.name + ".")
 
               // Thanks to mon/s3p_extract on GitHub.
               let bufOffset = 4
@@ -383,7 +468,7 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
 
             let bgmId = parseInt(bgm.name.match(/(?<=(custom|special)_)([0-9]*)/g)[0])
             if(bgmId && resourceJsonData.bgm.find(bgm => bgm.value == bgmId) == undefined) {
-              console.log("[bgm] adding to json: " + bgmId + " - " + bgm.name)
+              logLine("[bgm] adding to json: " + bgmId + " - " + bgm.name)
               newBGMData.push(bgm.name)
               resourceJsonData.bgm.push({"value": bgmId, "name": bgm.name})
             }
@@ -391,43 +476,41 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
         }
       }
     } else {
-      console.log('Error reading BGM directory.')
-      runErrors.push('Error reading BGM directory.')
+      logError('Error reading BGM directory.')
     }
 
     // Copying new chat stamps from gamedata
-    console.log("Copying new chat stamps from gamedata")
-    if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/others/chat_stamp.xml")) {
+    logLine("Copying new chat stamps from gamedata")
+    if (IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/others/chat_stamp.xml")) {
       let chatStampData = U.parseXML(U.DecodeString(await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/others/chat_stamp.xml"), "shift_jis"), false)
       // console.log(JSON.stringify(chatStampData.chat_stamp_data))
-      for(const chatStamp of chatStampData.chat_stamp_data.info) {
-        if(resourceJsonData.stamp.find(stamp => stamp['value'] === chatStamp.id['@content'][0]) == undefined) {
+      for (const chatStamp of chatStampData.chat_stamp_data.info) {
+        if (resourceJsonData.stamp.find(stamp => stamp['value'] === chatStamp.id['@content'][0]) == undefined) {
           let stampTitle = chatStamp.title['@content'] + " " + (parseInt(chatStamp.id['@content'][0]) % 4 !== 0 ? parseInt(chatStamp.id['@content'][0]) % 4 : 4)
-          console.log("[chat_stamp] " + chatStamp.id['@content'][0] + " - " + stampTitle)
-          resourceJsonData.stamp.push({"value": chatStamp.id['@content'][0], "name": stampTitle})
+          logLine("[chat_stamp] " + chatStamp.id['@content'][0] + " - " + stampTitle)
+          resourceJsonData.stamp.push({ "value": chatStamp.id['@content'][0], "name": stampTitle })
           newChatStampData.push(chatStamp.id['@content'][0] + ": " + chatStamp.filename['@content'])
-        } 
-        if(!IO.Exists('webui/asset/chat_stamp/' + chatStamp.filename['@content'] + '.png') && !IO.Exists('webui/asset/chat_stamp/' + chatStamp.filename['@content'] + '.png')) {
-          console.log("[chat_stamp] copying " + chatStamp.filename['@content'] + '.png')
+        }
+        if (!IO.Exists('webui/asset/chat_stamp/' + chatStamp.filename['@content'] + '.png') && !IO.Exists('webui/asset/chat_stamp/' + chatStamp.filename['@content'] + '.png')) {
+          logLine("[chat_stamp] copying " + chatStamp.filename['@content'] + '.png')
           let fileToWrite = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/chat_stamp/" + chatStamp.filename['@content'] + ".png")
           IO.WriteFile('webui/asset/chat_stamp/' + chatStamp.filename['@content'] + '.png', fileToWrite)
         }
       }
-      resourceJsonData.stamp.sort(function(a, b){return a.value - b.value})
+      resourceJsonData.stamp.sort(function (a, b) { return a.value - b.value })
     } else {
-      console.log('Error reading chat stamp xml file.')
-      runErrors.push('Error reading chat stamp xml file.')
+      logError('Error reading chat stamp xml file.')
     }
 
     // Copying new valgene_item files from gamedata
-    console.log("Copying new valgene_item files from gamedata")
+    logLine("Copying new valgene_item files from gamedata")
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/valgene_item")) {
       let valgeneItemFiles = await IO.ReadDir(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/valgene_item")
       for await (const valgeneItem of valgeneItemFiles) {
         if (valgeneItem.name.substring(valgeneItem.name.length-4, valgeneItem.name.length).match(/(\.png|\.jpg)/g)) {
           let fileToWrite = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/valgene_item/" + valgeneItem.name)
           if(!IO.Exists('webui/asset/valgene_item/' + valgeneItem.name.substring(0, (valgeneItem.name.length - 4)) + ".png") && !IO.Exists('webui/asset/valgene_item/' + valgeneItem.name.substring(0, (valgeneItem.name.length - 4))  + ".jpg")) {
-            console.log("[valgene_item] copying " + valgeneItem.name)
+            logLine("[valgene_item] copying " + valgeneItem.name)
             IO.WriteFile('webui/asset/valgene_item/' + valgeneItem.name, fileToWrite)
             newValgeneItemFiles.push(valgeneItem.name)
           }
@@ -435,49 +518,46 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
         }
       }
     } else {
-      console.log('Error reading valgene_item directory.')
-      runErrors.push('Error reading valgene_item directory.')
+      logError('Error reading valgene_item directory.')
     }
 
     // Copying new akanames from gamedata
-    console.log("Copying new appeal titles from gamedata")
+    logLine("Copying new appeal titles from gamedata")
     // resourceJsonData.akaname = []
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/others/akaname_parts.xml")) {
       let akanameData = U.parseXML(U.DecodeString(await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/others/akaname_parts.xml"), "shift_jis"), false)
       for(const akaname of akanameData.akaname_parts.part) {
         if(resourceJsonData.akaname.find(aka => aka.value === akaname['@attr'].id) === undefined) {
           let akanameFmtd = ('@content' in akaname.word) ? akaname.word['@content'].replace(/(\[[A-z0-9:,\/\]]*)/g,'') : ''
-          console.log("[appeal title] adding " + akaname['@attr'].id + " - " + akanameFmtd)
+          logLine("[appeal title] adding " + akaname['@attr'].id + " - " + akanameFmtd)
           resourceJsonData.akaname.push({"value": akaname['@attr'].id, "name": akanameFmtd})
           newAkanames.push(akaname['@attr'].id + ": " + akanameFmtd )
         } 
       }
       resourceJsonData.akaname.sort(function(a, b){return parseInt(a.value) - parseInt(b.value)})
     } else {
-      console.log('Error reading akaname xml file.')
-      runErrors.push('Error reading akaname xml file.')
+      logError('Error reading akaname xml file.')
     }
 
     // Copying new appeal card data from gamedata
-    console.log("Copying new appeal card data from gamedata")
+    logLine("Copying new appeal card data from gamedata")
     if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + "/data/others/appeal_card.xml")) {
       let apCardData = U.parseXML(U.DecodeString(await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/others/appeal_card.xml"), "shift_jis"), false)
       for(const apCard of apCardData.appeal_card_data.card) {
         if(apCardJsonData.appeal_card_data.card.find(ap => ap['@id'] === apCard['@attr'].id) == undefined) {
-          console.log("[ap_card] adding to json: " + apCard['@attr'].id + " - " + apCard.info['title']['@content'])
+          logLine("[ap_card] adding to json: " + apCard['@attr'].id + " - " + apCard.info['title']['@content'])
           apCardJsonData.appeal_card_data.card.push({"@id": apCard['@attr'].id, "info": {"texture": apCard.info['texture']['@content'], "title": apCard.info['title']['@content']}})
           newAPCardData.push(apCard['@attr'].id + ": " + apCard.info['texture']['@content'] + "(" + apCard.info['title']['@content'] + ")")
         }
         if(!IO.Exists('webui/asset/ap_card/' + apCard.info['texture']['@content'] + '.png') && !IO.Exists('webui/asset/ap_card/' + apCard.info['texture']['@content'] + '.jpg')) {
-          console.log("[ap_card] copying " + apCard.info['texture']['@content'] + '.png')
+          logLine("[ap_card] copying " + apCard.info['texture']['@content'] + '.png')
           let fileToWrite = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + "/data/graphics/ap_card/" + apCard.info['texture']['@content'] + ".png")
           IO.WriteFile('webui/asset/ap_card/' + apCard.info['texture']['@content'] + '.png', fileToWrite)
         }
       }
       apCardJsonData.appeal_card_data.card.sort(function(a, b){return parseInt(a['@id']) - parseInt(b['@id'])})
     } else {
-      console.log('Error reading appeal card xml file.')
-      runErrors.push('Error reading appeal card xml file.')
+      logError('Error reading appeal card xml file.')
     }
 
     // Copying new jacket files from gamedata
@@ -524,12 +604,12 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
     await IO.WriteFile('webui/asset/json/appeal.json', JSON.stringify(apCardJsonData, null, 4))
 
     // Extract textures from ifs files using pngjs. Massive thanks to https://github.com/mon/ifstools
-    console.log("Extracting textures from IFS files")
+    logLine("Extracting textures from IFS files")
     for(let listIter = 0; listIter < textureslist.length; listIter++) {
       let manifestJson = {}
       let bufOffset = 0
       let magic = '6CAD8F89'
-      console.log(textureslist[listIter]['file'] + ":")
+      logLine(textureslist[listIter]['file'] + ":")
       if(IO.Exists(U.GetConfig('sdvx_eg_root_dir') + textureslist[listIter].file)) {
         let ifsBuffer = await IO.ReadFile(U.GetConfig('sdvx_eg_root_dir') + textureslist[listIter].file, {flag: 'r'})
         if(!fs.existsSync('plugins/sdvx@asphyxia/webui/asset/' + textureslist[listIter].asset_folder)) {
@@ -624,35 +704,34 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
                     pngf.data = Buffer.from(decompressed)
                     const outputStream = await fs.createWriteStream('plugins/sdvx@asphyxia/webui/asset/' + textureslist[listIter].asset_folder + '/' + tdFileName);
                     await pngf.pack().pipe(outputStream);
-                    console.log(' - ' + tdFileName + ' created successfully.');
+                    logLine(' - ' + tdFileName + ' created successfully.');
                     ifsSuccess.push(textureslist[listIter].file + ' - ' + tdFileName)
                   } else {
-                    console.log("Decompression mismatch for " + textureslist[listIter]['file'] + '/' + tdFileName)
-                    runErrors.push('decompression mismatch for ' + textureslist[listIter]['file'] + '/' + tdFileName)
+                    logError('decompression mismatch for ' + textureslist[listIter]['file'] + '/' + tdFileName)
                   }
                 }
               }
             }
           }
           if(!md5Matched) {
-            console.log('MD5 mismatch.')
-            runErrors.push('MD5 mismatch - ' + textureslist[listIter].file)
+            logError('MD5 mismatch - ' + textureslist[listIter].file)
           }
         } else {
-          console.log('IFS file unsupported/invalid.')
-          runErrors.push('IFS file "' + textureslist[listIter].file + '" unsupported/invalid.')
+          logError('IFS file "' + textureslist[listIter].file + '" unsupported/invalid.')
         }
       } else {
-        console.log('Error reading ' + textureslist[listIter].file + '.')
-        runErrors.push('Error reading ' + textureslist[listIter].file + '.')
+        logError('Error reading ' + textureslist[listIter].file + '.')
       }
     }
 
-    console.log("Updating course_data.json")
+    logLine("Updating course_data.json")
 
     let courseData = JSON.parse(U.DecodeString(await IO.ReadFile('webui/asset/json/course_data.json'), 'utf8'))
     for(let cIter = 0; cIter < courseData.courseData.length; cIter++) {
-      if(courseData.courseData[cIter].version === 6) {
+      if(courseData.courseData[cIter].version === 2) {
+        courseData.courseData[cIter].info = COURSES2
+        courseDataUpdateSuccess = true
+      } else if(courseData.courseData[cIter].version === 6) {
         courseData.courseData[cIter].info = COURSES6
         courseDataUpdateSuccess = true
       } else if(courseData.courseData[cIter].version === 7) {
@@ -660,14 +739,15 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
         courseDataUpdateSuccess = true
       }
     }
-    if(courseDataUpdateSuccess === false) runErrors.push('[course_data] Update unsuccessful.')
+    if(courseDataUpdateSuccess === false) logError('[course_data] Update unsuccessful.')
 
     await IO.WriteFile('webui/asset/json/course_data.json', JSON.stringify(courseData, null, 4))
     
-    console.log("Update complete!")
+    logLine("Update complete!")
     send.json(
       {
         status: 'ok',
+        logs: runLogs,
         course: courseDataUpdateSuccess,
         ifs: ifsSuccess,
         akaname: newAkanames,
@@ -685,10 +765,12 @@ export const copyResourcesFromGame = async (data: {}, send: WebUISend) => {
       }
     )
   } catch (error) {
-    runErrors.push(error.stack)
+    let stack = (error && error.stack) ? error.stack : String(error)
+    logError(stack)
     send.json(
       {
         status: 'error',
+        logs: runLogs,
         errors: runErrors
       }
     )
